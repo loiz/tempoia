@@ -1,0 +1,92 @@
+services:
+  tempoia:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tempoia-predictor
+    ports:
+      - "8000:8000" # Expose le port 8000 de l'API sur le port 8000 de l'hôte
+    
+    # Volumes pour les données persistantes
+    volumes:
+      # Le code est maintenant dans l'image, on ne monte que les données persistantes
+      - ./logs:/app/logs
+      - ./tempo_weather.db:/app/tempo_weather.db
+      - ./tempo_model.joblib:/app/tempo_model.joblib
+      - ./scaler.joblib:/app/scaler.joblib
+      - ./label_encoder.joblib:/app/label_encoder.joblib
+      # Monter le fichier settings.py permet de le modifier sans reconstruire l'image
+      - ./settings.py:/app/settings.py
+      # Monter le fichier de test de l'API
+      - ./test_api.html:/app/test_api.html
+    
+    # Redémarrage automatique si le conteneur s'arrête
+    restart: unless-stopped
+    
+    # Limites de ressources (optionnel)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Zone horaire et paramètres d'exécution
+    environment:
+      - TZ=Europe/Paris
+      
+      # === CONFIGURATION DE L'EXÉCUTION ===
+      # Format cron pour l'horaire d'exécution
+      # Défaut: 20 6 * * * (6h20 chaque jour)
+      # Exemples:
+      #   0 6 * * *     = 6h00 chaque jour
+      #   0 */6 * * *   = Toutes les 6 heures
+      #   */30 * * * *  = Toutes les 30 minutes
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-20 6 * * *}
+      
+      # === ARGUMENTS DU SCRIPT TEMPOIA ===
+      # Mode d'exécution: auto-mqtt, predict, train, init-db, etc.
+      - TEMPOIA_MODE=${TEMPOIA_MODE:-auto-mqtt}
+      
+      # === PARAMÈTRES MQTT ===
+      # Broker MQTT
+      - MQTT_BROKER=${MQTT_BROKER:-mqtt} # Utilise le nom du service mqtt par défaut
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_TOPIC=${MQTT_TOPIC:-tempo/forecast}
+      - MQTT_USER=${MQTT_USER:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_DISCOVERY_PREFIX=${MQTT_DISCOVERY_PREFIX:-homeassistant}
+      
+      # === PARAMÈTRES DE PRÉDICTION ===
+      # Nombre de jours à prédire
+      - FORECAST_DAYS=${FORECAST_DAYS:-14}
+      
+      # === PARAMÈTRES DE LA BASE DE DONNÉES ===
+      # Nombre d'années à charger lors de l'initialisation
+      - DB_YEARS=${DB_YEARS:-7}
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Service optionnel : MQTT (si vous voulez utiliser la fonctionnalité MQTT)
+  mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: tempoia-mqtt
+    ports:
+      - "${MQTT_PORT_HOST:-1883}:1883"
+      - "9001:9001"
+    volumes:
+      - ./mqtt-config:/mosquitto/config
+      - ./mqtt-data:/mosquitto/data
+      - ./mqtt-logs:/mosquitto/log
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Paris
+    profiles:
+      - mqtt

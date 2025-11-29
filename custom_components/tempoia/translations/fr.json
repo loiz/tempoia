@@ -1,0 +1,71 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configurer TempoIA",
+                "description": "Entrez les détails de connexion de votre API TempoIA.",
+                "data": {
+                    "host": "URL de l'API",
+                    "token": "Token API (optionnel)",
+                    "scan_interval": "Intervalle de mise à jour (minutes)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Échec de connexion à l'API. Veuillez vérifier l'URL.",
+            "invalid_auth": "Token API invalide.",
+            "unknown": "Une erreur inattendue s'est produite."
+        },
+        "abort": {
+            "already_configured": "TempoIA est déjà configuré."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Options TempoIA",
+                "description": "Configurez les options de l'intégration TempoIA.",
+                "data": {
+                    "scan_interval": "Intervalle de mise à jour (minutes)"
+                }
+            }
+        }
+    },
+    "entity": {
+        "sensor": {
+            "tempoia_prediction": {
+                "name": "TempoIA Jour {day}",
+                "state": {
+                    "🔵": "Bleu",
+                    "⚪": "Blanc",
+                    "🔴": "Rouge"
+                }
+            }
+        },
+        "calendar": {
+            "tempoia_forecast": {
+                "name": "Prévisions TempoIA"
+            }
+        }
+    },
+    "services": {
+        "train_model": {
+            "name": "Entraîner le modèle",
+            "description": "Déclenche l'entraînement du modèle sur l'API TempoIA."
+        },
+        "update_database": {
+            "name": "Mettre à jour la base de données",
+            "description": "Met à jour la base de données avec les dernières données Tempo et météo.",
+            "fields": {
+                "years": {
+                    "name": "Années",
+                    "description": "Nombre d'années de données à récupérer (défaut: 10)."
+                }
+            }
+        },
+        "refresh_forecast": {
+            "name": "Actualiser les prévisions",
+            "description": "Actualise manuellement les données de prévision."
+        }
+    }
+}

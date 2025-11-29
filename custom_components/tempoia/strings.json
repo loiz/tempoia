@@ -1,0 +1,71 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configure TempoIA",
+                "description": "Enter your TempoIA API connection details.",
+                "data": {
+                    "host": "API URL",
+                    "token": "API Token (optional)",
+                    "scan_interval": "Update interval (minutes)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Failed to connect to the API. Please check the URL.",
+            "invalid_auth": "Invalid API token.",
+            "unknown": "Unexpected error occurred."
+        },
+        "abort": {
+            "already_configured": "TempoIA is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "TempoIA Options",
+                "description": "Configure TempoIA integration options.",
+                "data": {
+                    "scan_interval": "Update interval (minutes)"
+                }
+            }
+        }
+    },
+    "entity": {
+        "sensor": {
+            "tempoia_prediction": {
+                "name": "TempoIA Day {day}",
+                "state": {
+                    "🔵": "Blue",
+                    "⚪": "White",
+                    "🔴": "Red"
+                }
+            }
+        },
+        "calendar": {
+            "tempoia_forecast": {
+                "name": "TempoIA Forecast"
+            }
+        }
+    },
+    "services": {
+        "train_model": {
+            "name": "Train Model",
+            "description": "Triggers model training on the TempoIA API."
+        },
+        "update_database": {
+            "name": "Update Database",
+            "description": "Updates the database with the latest Tempo and weather data.",
+            "fields": {
+                "years": {
+                    "name": "Years",
+                    "description": "Number of years of data to fetch (default: 10)."
+                }
+            }
+        },
+        "refresh_forecast": {
+            "name": "Refresh Forecast",
+            "description": "Manually refreshes the forecast data."
+        }
+    }
+}

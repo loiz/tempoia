@@ -1,0 +1,16 @@
+{
+  "domain": "tempoia",
+  "name": "TempoIA",
+  "documentation": "https://github.com/loiz/TempoIA",
+  "issue_tracker": "https://github.com/loiz/TempoIA/issues",
+  "codeowners": [
+    "@loiz"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "requirements": [],
+  "iot_class": "cloud_polling",
+  "version": "1.1.0",
+  "after_dependencies": [],
+  "integration_type": "service"
+}

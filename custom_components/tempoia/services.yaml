@@ -1,0 +1,24 @@
+# Services for TempoIA Integration
+
+train_model:
+  name: Train Model
+  description: Triggers model training on the TempoIA API. This will analyze historical data and improve prediction accuracy.
+
+update_database:
+  name: Update Database
+  description: Updates the database with the latest Tempo and weather data from external APIs.
+  fields:
+    years:
+      name: Years of Data
+      description: Number of years of historical data to fetch (default is 10).
+      example: 5
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+
+refresh_forecast:
+  name: Refresh Forecast
+  description: Manually refreshes the forecast data from the API, bypassing the configured update interval.

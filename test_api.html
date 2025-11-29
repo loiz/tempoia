@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TempoIA API Tester</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f4f4f9;
+            color: #333;
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input,
+        button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            min-height: 50px;
+        }
+
+        .status-ok {
+            color: #27ae60;
+        }
+
+        .status-error {
+            color: #c0392b;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .endpoint-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .action {
+            margin-bottom: 15px;
+        }
+        .result {
+            margin-top: 15px;
+        }
+        #perf-history-list li {
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        #perf-history-list li:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <label for="apiToken">API Token (X-API-Token)</label>
+        <input type="password" id="apiToken" placeholder="Enter your API token (default: change-me)" value="change-me">
+        <label for="apiUrl">API URL</label>
+        <input type="text" id="apiUrl" value="">
+        <button onclick="checkStatus()">Check API Status</button>
+        <div id="statusResult"></div>
+    </div>
+
+    <div class="endpoint-card">
+        <h2>1. Prediction</h2>
+        <p><code>GET /predict</code></p>
+        <div class="action">
+            <label for="days">Days to predict:</label>
+            <input type="number" id="days" value="1" min="1" max="14" style="width: 80px; display: inline-block;">
+            <button onclick="callApi(`/predict?days=${document.getElementById('days').value}`, 'GET', 'predict-result')">Get Prediction</button>
+        </div>
+        <div class="result">
+            <pre id="predict-result"></pre>
+        </div>
+    </div>
+
+    <div class="endpoint-card">
+        <h2>2. Maintenance Actions</h2>
+        <p><code>POST /train</code> and <code>POST /update_database</code></p>
+        <div class="action">
+            <button onclick="callApi('/train', 'POST', 'train-result', true)">Train Model</button>
+            <button onclick="callApi('/update_database', 'POST', 'update-result', true)">Update Database</button>
+        </div>
+        <div class="result">
+            <pre id="train-result"></pre>
+            <pre id="update-result"></pre>
+        </div>
+    </div>
+
+    <div class="endpoint-card">
+        <h2>3. Database Statistics</h2>
+        <p><code>GET /stats/database</code></p>
+        <div class="action">
+            <button onclick="callApi('/stats/database', 'GET', 'stats-result')">Get Stats</button>
+        </div>
+        <div class="result">
+            <pre id="stats-result"></pre>
+        </div>
+    </div>
+
+    <div class="endpoint-card">
+        <h2>4. Performance History</h2>
+        <p><code>GET /performance/history</code></p>
+        <div class="action">
+            <button onclick="getPerformanceHistory()">Get History</button>
+        </div>
+        <div class="result">
+            <canvas id="perfChart"></canvas>
+            <ul id="perf-history-list"></ul>
+            <pre id="perf-detail-result"></pre>
+        </div>
+    </div>
+
+    <script>
+        let perfChart = null;
+
+        const getBaseUrl = () => document.getElementById('apiUrl').value.trim().replace(/\/$/, '') || window.location.origin;
+
+        async function callApi(endpoint, method, resultElementId, confirmAction = false) {
+            if (confirmAction && !confirm(`Are you sure you want to execute ${method} ${endpoint}?`)) {
+                return;
+            }
+
+            const resultEl = document.getElementById(resultElementId);
+            resultEl.textContent = 'Loading...';
+
+            const token = document.getElementById('apiToken').value;
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            // Only add token if it's not a public GET endpoint
+            if (method !== 'GET' || endpoint.startsWith('/stats') || endpoint.startsWith('/performance')) {
+                 headers['X-API-Token'] = token;
+            }
+
+            try {
+                const response = await fetch(getBaseUrl() + endpoint, { method, headers });
+                const data = await response.json();
+                resultEl.textContent = JSON.stringify(data, null, 2);
+                if (!response.ok) {
+                    resultEl.style.borderColor = 'red';
+                } else {
+                    resultEl.style.borderColor = '';
+                }
+                return data; // Return data for further processing
+            } catch (err) {
+                resultEl.textContent = `Error: ${err.message}`;
+                resultEl.style.borderColor = 'red';
+            }
+        }
+
+        async function checkStatus() {
+            const data = await callApi('/status', 'GET', 'statusResult');
+            if (data && data.status === 'ok') {
+                document.getElementById('statusResult').innerHTML =
+                    `<span class="status-ok">● Online</span> (Time: ${data.time})`;
+            } else {
+                document.getElementById('statusResult').innerHTML =
+                    `<span class="status-error">● Offline</span>`;
+            }
+        }
+
+        async function getPerformanceHistory() {
+            const historyData = await callApi('/performance/history', 'GET', 'perf-detail-result');
+            if (!historyData || historyData.length === 0) {
+                document.getElementById('perf-history-list').innerHTML = '<li>No history found.</li>';
+                return;
+            }
+
+            // Populate list
+            const listEl = document.getElementById('perf-history-list');
+            listEl.innerHTML = '';
+            historyData.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = `ID ${item.id}: ${new Date(item.training_date).toLocaleString()} - Acc: ${item.test_accuracy.toFixed(3)}, F1: ${item.test_f1_macro.toFixed(3)}`;
+                li.onclick = () => callApi(`/performance/history/${item.id}`, 'GET', 'perf-detail-result');
+                listEl.appendChild(li);
+            });
+
+            // Draw chart
+            const ctx = document.getElementById('perfChart').getContext('2d');
+            const reversedData = [...historyData].reverse(); // Chart.js expects chronological order
+            const labels = reversedData.map(item => new Date(item.training_date).toLocaleDateString());
+            const accuracyData = reversedData.map(item => item.test_accuracy);
+            const f1Data = reversedData.map(item => item.test_f1_macro);
+
+            if (perfChart) {
+                perfChart.destroy();
+            }
+
+            perfChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Test Accuracy',
+                        data: accuracyData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    }, {
+                        label: 'Test F1 Macro',
+                        data: f1Data,
+                        borderColor: 'rgb(255, 99, 132)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            suggestedMin: Math.min(...accuracyData, ...f1Data) * 0.98,
+                            suggestedMax: 1.0
+                        }
+                    },
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Model Performance Over Time'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initial status check on page load
+        window.onload = checkStatus;
+    </script>
+</body>
+
+</html>
