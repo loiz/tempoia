@@ -3,6 +3,22 @@
 train_model:
   name: Train Model
   description: Triggers model training on the TempoIA API. This will analyze historical data and improve prediction accuracy.
+  fields:
+    algorithm:
+      name: Algorithm
+      description: The algorithm to use for training. Use 'best' to run a benchmark and select the best one.
+      example: best
+      required: false
+      selector:
+        select:
+          options:
+            - best
+            - mlp
+            - random_forest
+            - gb
+            - svc
+            - logistic
+
 
 update_database:
   name: Update Database

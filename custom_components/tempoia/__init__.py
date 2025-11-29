@@ -89,26 +89,33 @@ async def _register_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
     host: str = entry.data.get(CONF_HOST, "")
     token: str | None = entry.data.get(CONF_TOKEN)
 
-    async def _call_api(endpoint: str, payload: dict | None = None) -> Any:
+    async def _call_api(endpoint: str, params: dict | None = None, payload: dict | None = None) -> Any:
         url = f"{host.rstrip('/')}{endpoint}"
         headers: dict[str, str] = {}
         if token:
             headers["X-API-Token"] = token
         session: aiohttp.ClientSession = aiohttp_client.async_get_clientsession(hass)
-        async with session.post(url, json=payload or {}, headers=headers) as resp:
+        
+        # Ensure params are strings
+        query_params = {k: str(v) for k, v in (params or {}).items()}
+        
+        async with session.post(url, params=query_params, json=payload or {}, headers=headers) as resp:
             if resp.status != 200:
+                text = await resp.text()
+                _LOGGER.error("TempoIA API error: %s - %s", resp.status, text)
                 raise Exception(f"TempoIA service call failed ({resp.status})")
             return await resp.json()
 
     async def train_model_service(call):
-        _LOGGER.info("Calling TempoIA /train via Home Assistant service")
-        await _call_api("/train")
+        algorithm = call.data.get("algorithm", "best")
+        _LOGGER.info("Calling TempoIA /train via Home Assistant service (algorithm=%s)", algorithm)
+        await _call_api("/train", params={"algorithm": algorithm})
         _LOGGER.info("TempoIA model training triggered successfully")
 
     async def update_database_service(call):
         years = call.data.get("years", 10)
         _LOGGER.info("Calling TempoIA /update_database via Home Assistant service (years=%s)", years)
-        await _call_api("/update_database", {"years": years})
+        await _call_api("/update_database", params={"years": years})
         _LOGGER.info("TempoIA database update triggered successfully")
 
     hass.services.async_register(
