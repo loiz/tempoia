@@ -59,7 +59,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_lim
 app = FastAPI(
     title="TempoIA API",
     description="API for TempoIA predictions, training and database updates.",
-    version="1.0.0",
+    version="1.0.1",
     openapi_tags=[
         {"name": "prediction", "description": "Endpoints returning predictions (no auth)."},
         {"name": "maintenance", "description": "Endpoints that modify data or model (auth required)."},
@@ -200,15 +200,18 @@ async def train_model(
     """
     predictor = await get_predictor()
     trained_algo_key = algorithm
-
+    benchmark_data = None
+    algorithm = "best"
     if algorithm == "best":
         logger.info("Mode 'best': Starting algorithm benchmark to find the best model...")
         benchmark_results = await run_in_threadpool(predictor.benchmark_algorithms)
 
         if not benchmark_results or "_best" not in benchmark_results:
+            logger.error(f"Benchmark failed. Results: {benchmark_results}")
             raise HTTPException(status_code=500, detail="Algorithm benchmark failed, could not determine best model.")
 
         trained_algo_key = benchmark_results["_best"]["key"]
+        benchmark_data = benchmark_results
         logger.info(f"Best algorithm found: {trained_algo_key}. Now training the final model...")
     else:
         # Validate if the specified algorithm is valid
@@ -226,7 +229,15 @@ async def train_model(
 
     await clear_prediction_cache()
     logger.info(f"Model training completed with algorithm '{trained_algo_key}', cache cleared")
-    return {"status": f"training completed with {trained_algo_key}"}
+    
+    response = {
+        "status": f"training completed with {trained_algo_key}",
+        "algorithm": trained_algo_key
+    }
+    if benchmark_data:
+        response["benchmark_results"] = benchmark_data
+        
+    return response
 
 @app.post(
     "/update_database",
