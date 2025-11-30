@@ -59,7 +59,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_lim
 app = FastAPI(
     title="TempoIA API",
     description="API for TempoIA predictions, training and database updates.",
-    version="1.0.1",
+    version="1.0.5",
     openapi_tags=[
         {"name": "prediction", "description": "Endpoints returning predictions (no auth)."},
         {"name": "maintenance", "description": "Endpoints that modify data or model (auth required)."},

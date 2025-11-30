@@ -26,11 +26,18 @@ from .const import DOMAIN, DATA_KEY_COORDINATOR
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback) -> bool:
-    """Set up the TempoIA sensor from a config entry."""
+    """Set up the TempoIA sensors from a config entry."""
+    # Main coordinator for predictions
     coordinator = hass.data[DOMAIN][entry.entry_id][DATA_KEY_COORDINATOR]
-    # Create a sensor for each of the next 14 days
-    sensors = [TempoiaPredictionSensor(coordinator, day_index=i) for i in range(14)]
-    async_add_entities(sensors, True)
+    # Separate coordinator for tariffs
+    tariff_coordinator = TariffDataUpdateCoordinator(hass, entry.data.get(CONF_HOST, ''), entry.data.get(CONF_TOKEN), entry.options.get('scan_interval', 10))
+    # Create day prediction sensors
+    day_sensors = [TempoiaPredictionSensor(coordinator, day_index=i) for i in range(14)]
+    # Create tariff sensors using the tariff coordinator
+    tariff_keys = ["bleuHC", "bleuHP", "blancHC", "blancHP", "rougeHC", "rougeHP"]
+    tariff_sensors = [TariffSensor(tariff_coordinator, key) for key in tariff_keys]
+    # Add all sensors
+    async_add_entities(day_sensors + tariff_sensors, True)
     return True
 
 class TempoiaDataUpdateCoordinator(DataUpdateCoordinator):
@@ -47,17 +54,30 @@ class TempoiaDataUpdateCoordinator(DataUpdateCoordinator):
         self.token = token
 
     async def _async_update_data(self) -> dict:
-        url = f"{self.host}/predict?days=14"
+        # Fetch prediction data
+        predict_url = f"{self.host}/predict?days=14"
         headers: dict[str, str] = {}
         if self.token:
             headers["X-API-Token"] = self.token
         session: ClientSession = async_get_clientsession(self.hass)
-        async with session.get(url, headers=headers) as resp:
+        async with session.get(predict_url, headers=headers) as resp:
             if resp.status != 200:
                 raise UpdateFailed(f"Error fetching prediction: {resp.status}")
-            data = await resp.json()
-            _LOGGER.debug("Received data from API: %s", data)
-            return data
+            prediction_data = await resp.json()
+            _LOGGER.debug("Received prediction data from API: %s", prediction_data)
+        # Fetch tariff data
+        tarifs_url = "https://www.api-couleur-tempo.fr/api/tarifs"
+        async with session.get(tarifs_url, headers=headers) as resp:
+            if resp.status != 200:
+                raise UpdateFailed(f"Error fetching tarifs: {resp.status}")
+            tarifs_data = await resp.json()
+            _LOGGER.debug("Received tarifs data from API: %s", tarifs_data)
+        # Combine both datasets
+        combined = {
+            "predictions": prediction_data.get("predictions", []),
+            "tarifs": tarifs_data,
+        }
+        return combined
 
 class TempoiaPredictionSensor(CoordinatorEntity, SensorEntity):
     """Sensor that shows the next‑day prediction from TempoIA."""
@@ -140,6 +160,14 @@ class TempoiaPredictionSensor(CoordinatorEntity, SensorEntity):
             "proba_bleu": probabilities.get("BLEU"),
             "proba_blanc": probabilities.get("BLANC"),
             "proba_rouge": probabilities.get("ROUGE"),
+            # Tariff information (same for all days)
+            "tarif_bleu_hc": self.coordinator.data.get("tarifs", {}).get("bleuHC"),
+            "tarif_bleu_hp": self.coordinator.data.get("tarifs", {}).get("bleuHP"),
+            "tarif_blanc_hc": self.coordinator.data.get("tarifs", {}).get("blancHC"),
+            "tarif_blanc_hp": self.coordinator.data.get("tarifs", {}).get("blancHP"),
+            "tarif_rouge_hc": self.coordinator.data.get("tarifs", {}).get("rougeHC"),
+            "tarif_rouge_hp": self.coordinator.data.get("tarifs", {}).get("rougeHP"),
+            "tarif_date_debut": self.coordinator.data.get("tarifs", {}).get("dateDebut"),
         }
 
         self._attr_available = True
@@ -151,3 +179,56 @@ class TempoiaPredictionSensor(CoordinatorEntity, SensorEntity):
         await super().async_added_to_hass()
         # Trigger initial update
         self._handle_coordinator_update()
+
+
+class TariffSensor(CoordinatorEntity, SensorEntity):
+    """Sensor that exposes a single tariff value from the API."""
+
+    _attr_icon = "mdi:currency-eur"
+    _attr_unit_of_measurement = "€/kWh"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, tariff_key: str):
+        super().__init__(coordinator)
+        self.tariff_key = tariff_key
+        self._attr_unique_id = f"tempoia_tarif_{tariff_key.lower()}"
+        self._attr_name = f"Tarif {tariff_key}"
+        self._attr_native_value = None
+        self._attr_available = False
+
+    def _handle_coordinator_update(self) -> None:
+        """Update the tariff value when coordinator data changes."""
+        tariffs = self.coordinator.data if self.coordinator.data else {}
+        value = tariffs.get(self.tariff_key)
+        if value is None:
+            self._attr_available = False
+            self._attr_native_value = None
+        else:
+            self._attr_available = True
+            self._attr_native_value = value
+        self.async_write_ha_state()
+
+class TariffDataUpdateCoordinator(DataUpdateCoordinator):
+    """Coordinator for fetching tariff data only."""
+
+    def __init__(self, hass: HomeAssistant, host: str, token: str | None, scan_interval_min: int):
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="TempoIA Tariffs",
+            update_interval=timedelta(minutes=scan_interval_min),
+        )
+        self.host = host.rstrip('/')
+        self.token = token
+
+    async def _async_update_data(self) -> dict:
+        headers: dict[str, str] = {}
+        if self.token:
+            headers["X-API-Token"] = self.token
+        session: ClientSession = async_get_clientsession(self.hass)
+        tarifs_url = "https://www.api-couleur-tempo.fr/api/tarifs"
+        async with session.get(tarifs_url, headers=headers) as resp:
+            if resp.status != 200:
+                raise UpdateFailed(f"Error fetching tarifs: {resp.status}")
+            tarifs_data = await resp.json()
+            _LOGGER.debug("Received tarifs data from API: %s", tarifs_data)
+        return tarifs_data
